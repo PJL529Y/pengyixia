@@ -81,9 +81,9 @@ function validateName(name: string): { valid: boolean; message: string } {
     return { valid: false, message: '姓名过长，请检查' };
   }
 
-  // 允许中文、·（少数民族）
-  if (!/^[一-龥·]+$/.test(n)) {
-    return { valid: false, message: '姓名只能包含中文' };
+  // 允许中文、·（少数民族）、字母（英文名）
+  if (!/^[一-鿿\w·]+$/.test(n)) {
+    return { valid: false, message: '姓名格式不正确' };
   }
 
   return { valid: true, message: '验证通过' };
