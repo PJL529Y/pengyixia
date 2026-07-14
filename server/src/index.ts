@@ -5,8 +5,7 @@ import cors from 'cors';
 
 import { searchUniversities, findUniversity } from './data/universities';
 import {
-  sendVerificationCode,
-  verifyEmail,
+  verifyStudentIdentity,
   createUser,
   getUser,
   updateUserStatus,
@@ -16,7 +15,6 @@ import {
   rateMeet,
   getOnlineCount,
   saveUserBirth,
-  submitStudentIdVerification,
 } from './services/auth';
 import {
   joinQueue,
@@ -74,19 +72,13 @@ app.get('/api/universities/:id', (req, res) => {
   res.json({ success: true, data: uni });
 });
 
-// 发送验证码
-app.post('/api/auth/send-code', (req, res) => {
-  const { email } = req.body;
-  if (!email) return res.status(400).json({ success: false, message: '请输入邮箱' });
-  const result = sendVerificationCode(email);
-  res.json(result);
-});
-
-// 验证邮箱
-app.post('/api/auth/verify-code', (req, res) => {
-  const { email, code } = req.body;
-  if (!email || !code) return res.status(400).json({ success: false, message: '请输入邮箱和验证码' });
-  const result = verifyEmail(email, code);
+// 学号+姓名认证
+app.post('/api/auth/verify', (req, res) => {
+  const { universityId, studentId, name } = req.body;
+  if (!universityId || !studentId || !name) {
+    return res.status(400).json({ success: false, message: '请填写学号和姓名' });
+  }
+  const result = verifyStudentIdentity(universityId, studentId, name);
   res.json(result);
 });
 
@@ -189,16 +181,6 @@ app.post('/api/bazi/personal', (req, res) => {
   } catch (err: any) {
     res.status(400).json({ success: false, message: err.message });
   }
-});
-
-// 学生证认证（兜底方案）
-app.post('/api/auth/student-id', (req, res) => {
-  const { userId } = req.body;
-  if (!userId) {
-    return res.status(400).json({ success: false, message: '请提供用户ID' });
-  }
-  const result = submitStudentIdVerification(userId);
-  res.json(result);
 });
 
 // ============ 辅助函数 ============

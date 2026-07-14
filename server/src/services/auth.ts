@@ -1,10 +1,11 @@
 import { User, UserStatus, BirthInfo } from '../types';
 import { findUniversity } from '../data/universities';
 
-// 内存用户存储（MVP阶段，后续换数据库）
+// 内存用户存储
 const users: Map<string, User> = new Map();
-const emailCodes: Map<string, { code: string; expires: number }> = new Map();
-const studentIdVerifications: Map<string, { status: 'pending' | 'approved' | 'rejected'; userId: string }> = new Map();
+
+// 学号格式缓存（已验证通过的学号，防止重复注册）
+const verifiedStudentIds: Set<string> = new Set();
 
 // 生成昵称
 const adjectives = [
@@ -23,63 +24,111 @@ function randomNickname(): string {
   return `${adj}${noun}#${num}`;
 }
 
-// ============ 邮箱认证 ============
+// ============ 学号+姓名认证 ============
 
-// 发送验证码（模拟）
-export function sendVerificationCode(email: string): { success: boolean; message: string; devCode?: string } {
-  if (!email.endsWith('.edu.cn')) {
-    return { success: false, message: '请使用 .edu.cn 结尾的学校邮箱' };
+/**
+ * 验证学号格式
+ * 不同学校的学号规则不同：
+ * - 大部分是8-12位数字
+ * - 少数包含字母
+ */
+function validateStudentId(studentId: string, universityId: number): { valid: boolean; message: string } {
+  if (!studentId || studentId.trim().length === 0) {
+    return { valid: false, message: '请输入学号' };
   }
 
-  const code = Math.floor(100000 + Math.random() * 900000).toString();
-  emailCodes.set(email, {
-    code,
-    expires: Date.now() + 10 * 60 * 1000,
-  });
+  const id = studentId.trim();
 
-  console.log(`\n📧 [模拟邮件] 验证码已发送到 ${email}: ${code}\n`);
-  return {
-    success: true,
-    message: '验证码已发送',
-    devCode: process.env.NODE_ENV !== 'production' ? code : undefined,
-  };
+  // 基础格式：6-15位，字母或数字
+  if (id.length < 6) {
+    return { valid: false, message: '学号格式不正确，请检查' };
+  }
+  if (id.length > 15) {
+    return { valid: false, message: '学号格式不正确，请检查' };
+  }
+  if (!/^[a-zA-Z0-9]+$/.test(id)) {
+    return { valid: false, message: '学号只能包含字母和数字' };
+  }
+
+  // 特定学校格式校验（常见的）
+  const uni = findUniversity(universityId);
+  if (uni) {
+    // 大部分中国大学学号是纯数字，8-12位
+    if (/^\d+$/.test(id)) {
+      if (id.length >= 8 && id.length <= 12) {
+        return { valid: true, message: '验证通过' };
+      }
+      // 长度不够也可能，比如一些学校学号较短
+      return { valid: true, message: '验证通过' };
+    }
+  }
+
+  return { valid: true, message: '验证通过' };
 }
 
-// 验证邮箱
-export function verifyEmail(email: string, code: string): { success: boolean; message: string; universityId?: number } {
-  const record = emailCodes.get(email);
-
-  if (!record) {
-    return { success: false, message: '请先获取验证码' };
-  }
-  if (Date.now() > record.expires) {
-    emailCodes.delete(email);
-    return { success: false, message: '验证码已过期，请重新获取' };
-  }
-  if (record.code !== code) {
-    return { success: false, message: '验证码错误' };
+function validateName(name: string): { valid: boolean; message: string } {
+  if (!name || name.trim().length === 0) {
+    return { valid: false, message: '请输入姓名' };
   }
 
-  const domain = email.split('@')[1];
-  const universities = require('../data/universities').universities;
-  const uni = universities.find((u: any) => u.eduDomain === domain);
+  const n = name.trim();
 
+  // 中文姓名2-10个字符
+  if (n.length < 2) {
+    return { valid: false, message: '请输入完整姓名' };
+  }
+  if (n.length > 10) {
+    return { valid: false, message: '姓名过长，请检查' };
+  }
+
+  // 允许中文、·（少数民族）
+  if (!/^[一-龥·]+$/.test(n)) {
+    return { valid: false, message: '姓名只能包含中文' };
+  }
+
+  return { valid: true, message: '验证通过' };
+}
+
+export function verifyStudentIdentity(universityId: number, studentId: string, name: string): {
+  success: boolean;
+  message: string;
+  universityId?: number;
+} {
+  // 校验学校
+  const uni = findUniversity(universityId);
   if (!uni) {
-    return { success: false, message: '未找到对应学校，请确认邮箱域名正确' };
+    return { success: false, message: '学校不存在' };
   }
 
-  emailCodes.delete(email);
-  return { success: true, message: '验证成功', universityId: uni.id };
+  // 校验学号
+  const idResult = validateStudentId(studentId, universityId);
+  if (!idResult.valid) {
+    return { success: false, message: idResult.message };
+  }
+
+  // 校验姓名
+  const nameResult = validateName(name);
+  if (!nameResult.valid) {
+    return { success: false, message: nameResult.message };
+  }
+
+  // 检查是否已注册（同一学号只能注册一次）
+  const key = `${universityId}_${studentId.trim()}`;
+  if (verifiedStudentIds.has(key)) {
+    return { success: false, message: '该学号已被注册，如果这是你的学号请联系我们' };
+  }
+
+  // 验证通过
+  verifiedStudentIds.add(key);
+  return { success: true, message: '认证通过', universityId };
 }
 
 // ============ 用户管理 ============
 
-// 创建用户
 export function createUser(
   universityId: number,
   gender: 'male' | 'female',
   campusName?: string,
-  verifyMethod?: 'email' | 'studentId'
 ): User {
   const uni = findUniversity(universityId);
   if (!uni) throw new Error('学校不存在');
@@ -107,12 +156,10 @@ export function createUser(
   return user;
 }
 
-// 获取用户
 export function getUser(userId: string): User | undefined {
   return users.get(userId);
 }
 
-// 更新用户状态
 export function updateUserStatus(userId: string, status: UserStatus): User | undefined {
   const user = users.get(userId);
   if (!user) return undefined;
@@ -120,7 +167,6 @@ export function updateUserStatus(userId: string, status: UserStatus): User | und
   return user;
 }
 
-// 更新用户位置
 export function updateUserLocation(userId: string, lat: number, lng: number): User | undefined {
   const user = users.get(userId);
   if (!user) return undefined;
@@ -129,7 +175,6 @@ export function updateUserLocation(userId: string, lat: number, lng: number): Us
   return user;
 }
 
-// 更新用户校区
 export function updateUserCampus(userId: string, campusName: string): User | undefined {
   const user = users.get(userId);
   if (!user) return undefined;
@@ -143,7 +188,6 @@ export function updateUserCampus(userId: string, campusName: string): User | und
   return user;
 }
 
-// 保存出生信息
 export function saveUserBirth(userId: string, birthInfo: BirthInfo): User | undefined {
   const user = users.get(userId);
   if (!user) return undefined;
@@ -151,7 +195,6 @@ export function saveUserBirth(userId: string, birthInfo: BirthInfo): User | unde
   return user;
 }
 
-// 禁言/封禁用户
 export function banUser(userId: string): void {
   const user = users.get(userId);
   if (user) {
@@ -160,19 +203,15 @@ export function banUser(userId: string): void {
   }
 }
 
-// 举报用户
 export function reportUser(userId: string): User | undefined {
   const user = users.get(userId);
   if (!user) return undefined;
   user.reportCount++;
   user.meetScore = Math.max(0, user.meetScore - 20);
-  if (user.reportCount >= 3) {
-    banUser(userId);
-  }
+  if (user.reportCount >= 3) banUser(userId);
   return user;
 }
 
-// 见面评价
 export function rateMeet(userId: string, rating: 'good' | 'ok' | 'bad'): User | undefined {
   const user = users.get(userId);
   if (!user) return undefined;
@@ -182,24 +221,6 @@ export function rateMeet(userId: string, rating: 'good' | 'ok' | 'bad'): User | 
   return user;
 }
 
-// 获取所有在线用户数
 export function getOnlineCount(): number {
   return users.size;
-}
-
-// ============ 学生证认证 ============
-
-// 提交学生证认证
-export function submitStudentIdVerification(userId: string): { success: boolean; message: string } {
-  const user = users.get(userId);
-  if (!user) return { success: false, message: '用户不存在' };
-
-  studentIdVerifications.set(userId, { status: 'pending', userId });
-  return { success: true, message: '学生证认证已提交，审核通过后即可使用' };
-}
-
-// 查询学生证认证状态
-export function getStudentIdVerificationStatus(userId: string): string | null {
-  const record = studentIdVerifications.get(userId);
-  return record ? record.status : null;
 }
