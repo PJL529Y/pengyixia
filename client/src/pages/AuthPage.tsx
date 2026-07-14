@@ -218,7 +218,8 @@ export default function AuthPage({ onRegister }: Props) {
       </div>
 
       <div className="pb-8 text-center relative z-10">
-        <p className="text-xs text-white/10">仅限本科学历 · 学号认证安全可靠</p>
+        <p className="text-xs text-white/10">永久免费 · 开源公益 · 禁止商用</p>
+        <p className="text-xs text-white/5 mt-1">仅限本科学历 · 学号认证 · github.com/PJL529Y/pengyixia</p>
       </div>
     </div>
   );

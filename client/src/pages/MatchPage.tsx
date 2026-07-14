@@ -133,6 +133,16 @@ export default function MatchPage({ socket, onGoProfile }: Props) {
               <span className="w-1.5 h-1.5 rounded-full bg-pink-400 animate-soul-pulse" />
               当前 {matchStatus?.availableCount ?? '...'} 位异性在线
             </div>
+
+            {/* 公益声明 */}
+            <div className="mt-8 text-center">
+              <p className="text-white/15 text-xs">
+                永久免费 · 开源公益 · 禁止商用
+              </p>
+              <p className="text-white/8 text-[10px] mt-1">
+                github.com/PJL529Y/pengyixia
+              </p>
+            </div>
           </div>
         )}
       </div>
