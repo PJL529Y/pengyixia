@@ -4,11 +4,12 @@ import { findUniversity } from '../data/universities';
 // 内存用户存储（MVP阶段，后续换数据库）
 const users: Map<string, User> = new Map();
 const emailCodes: Map<string, { code: string; expires: number }> = new Map();
+const studentIdVerifications: Map<string, { status: 'pending' | 'approved' | 'rejected'; userId: string }> = new Map();
 
 // 生成昵称
 const adjectives = [
   '开心的', '安静的', '好奇的', '温柔的', '勇敢的', '慵懒的', '忙碌的', '自由的',
-  '神秘的', '可爱的', '沉默的', '热情的', '成熟的', '调皮', '忧郁的', '阳光的',
+  '神秘的', '可爱的', '沉默的', '热情的', '成熟的', '调皮的', '忧郁的', '阳光的',
 ];
 const nouns = [
   '熊猫', '兔子', '小猫', '柴犬', '海豚', '考拉', '企鹅', '狐狸',
@@ -26,23 +27,20 @@ function randomNickname(): string {
 
 // 发送验证码（模拟）
 export function sendVerificationCode(email: string): { success: boolean; message: string; devCode?: string } {
-  // 验证是否为 .edu.cn 邮箱
   if (!email.endsWith('.edu.cn')) {
     return { success: false, message: '请使用 .edu.cn 结尾的学校邮箱' };
   }
 
-  // 生成6位验证码
   const code = Math.floor(100000 + Math.random() * 900000).toString();
   emailCodes.set(email, {
     code,
-    expires: Date.now() + 10 * 60 * 1000, // 10分钟有效
+    expires: Date.now() + 10 * 60 * 1000,
   });
 
   console.log(`\n📧 [模拟邮件] 验证码已发送到 ${email}: ${code}\n`);
   return {
     success: true,
     message: '验证码已发送',
-    // 开发模式：直接返回验证码给前端显示
     devCode: process.env.NODE_ENV !== 'production' ? code : undefined,
   };
 }
@@ -62,7 +60,6 @@ export function verifyEmail(email: string, code: string): { success: boolean; me
     return { success: false, message: '验证码错误' };
   }
 
-  // 验证成功，匹配学校
   const domain = email.split('@')[1];
   const universities = require('../data/universities').universities;
   const uni = universities.find((u: any) => u.eduDomain === domain);
@@ -78,7 +75,12 @@ export function verifyEmail(email: string, code: string): { success: boolean; me
 // ============ 用户管理 ============
 
 // 创建用户
-export function createUser(universityId: number, gender: 'male' | 'female', campusName?: string): User {
+export function createUser(
+  universityId: number,
+  gender: 'male' | 'female',
+  campusName?: string,
+  verifyMethod?: 'email' | 'studentId'
+): User {
   const uni = findUniversity(universityId);
   if (!uni) throw new Error('学校不存在');
 
@@ -95,7 +97,7 @@ export function createUser(universityId: number, gender: 'male' | 'female', camp
     lat: uni.campuses[0]?.lat,
     lng: uni.campuses[0]?.lng,
     createdAt: Date.now(),
-    meetScore: 100, // 初始信誉分
+    meetScore: 100,
     meetCount: 0,
     reportCount: 0,
     banned: false,
@@ -183,4 +185,21 @@ export function rateMeet(userId: string, rating: 'good' | 'ok' | 'bad'): User | 
 // 获取所有在线用户数
 export function getOnlineCount(): number {
   return users.size;
+}
+
+// ============ 学生证认证 ============
+
+// 提交学生证认证
+export function submitStudentIdVerification(userId: string): { success: boolean; message: string } {
+  const user = users.get(userId);
+  if (!user) return { success: false, message: '用户不存在' };
+
+  studentIdVerifications.set(userId, { status: 'pending', userId });
+  return { success: true, message: '学生证认证已提交，审核通过后即可使用' };
+}
+
+// 查询学生证认证状态
+export function getStudentIdVerificationStatus(userId: string): string | null {
+  const record = studentIdVerifications.get(userId);
+  return record ? record.status : null;
 }

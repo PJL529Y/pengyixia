@@ -16,6 +16,7 @@ import {
   rateMeet,
   getOnlineCount,
   saveUserBirth,
+  submitStudentIdVerification,
 } from './services/auth';
 import {
   joinQueue,
@@ -188,6 +189,16 @@ app.post('/api/bazi/personal', (req, res) => {
   } catch (err: any) {
     res.status(400).json({ success: false, message: err.message });
   }
+});
+
+// 学生证认证（兜底方案）
+app.post('/api/auth/student-id', (req, res) => {
+  const { userId } = req.body;
+  if (!userId) {
+    return res.status(400).json({ success: false, message: '请提供用户ID' });
+  }
+  const result = submitStudentIdVerification(userId);
+  res.json(result);
 });
 
 // ============ 辅助函数 ============
